@@ -1,7 +1,9 @@
 # ebs_autoexpend
 
-resource "aws_ssm_parameter" "cloudwatch_agent_config" {
-  name  = "/AmazonCloudWatchAgent/config"
+resource "aws_ssm_parameter" "eks_cloudwatch_agent_config" {
+  for_each = { for k, v in var.node_groups : k => v if var.write_to_parameter_store }
+
+  name  = "/C3/${var.cluster_name}/eks/nodes/${each.key}/cloudwatch-config"
   type  = "String"
   value = jsonencode({
     agent = {
@@ -10,7 +12,7 @@ resource "aws_ssm_parameter" "cloudwatch_agent_config" {
     metrics = {
       namespace = "Custom/EBSMonitoring"
       append_dimensions = {
-        InstanceId = "${aws_instance.ec2_instance.id}"
+        InstanceId = each.value["instance_id"]  # 👈 Injects instance ID dynamically
       }
       metrics_collected = {
         disk = {
@@ -21,7 +23,10 @@ resource "aws_ssm_parameter" "cloudwatch_agent_config" {
       }
     }
   })
+
+  tags = var.cluster_tags
 }
+
 
 resource "aws_ssm_document" "install_cloudwatch_agent" {
   name          = "InstallCloudWatchAgent"
