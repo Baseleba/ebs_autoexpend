@@ -23,30 +23,47 @@ resource "aws_ssm_parameter" "cloudwatch_agent_config" {
   })
 }
 
-
-resource "aws_ssm_document" "install_cw_agent" {
+resource "aws_ssm_document" "install_cloudwatch_agent" {
   name          = "InstallCloudWatchAgent"
   document_type = "Command"
 
   content = <<DOC
-  {
-    "schemaVersion": "2.2",
-    "description": "Install and configure CloudWatch Agent",
-    "mainSteps": [
-      {
-        "action": "aws:runShellScript",
-        "name": "InstallCloudWatchAgent",
-        "inputs": {
-          "runCommand": [
-            "sudo yum install -y amazon-cloudwatch-agent",
-            "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:/AmazonCloudWatchAgent/config -s"
-          ]
-        }
+{
+  "schemaVersion": "2.2",
+  "description": "Install and configure CloudWatch Agent on Linux or Windows",
+  "mainSteps": [
+    {
+      "action": "aws:runShellScript",
+      "name": "InstallLinuxAgent",
+      "precondition": {
+        "StringEquals": ["platformType", "Linux"]
+      },
+      "inputs": {
+        "runCommand": [
+          "sudo yum install -y amazon-cloudwatch-agent || sudo apt-get install -y amazon-cloudwatch-agent",
+          "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:/AmazonCloudWatchAgent/config -s"
+        ]
       }
-    ]
-  }
-  DOC
+    },
+    {
+      "action": "aws:runPowerShellScript",
+      "name": "InstallWindowsAgent",
+      "precondition": {
+        "StringEquals": ["platformType", "Windows"]
+      },
+      "inputs": {
+        "runCommand": [
+          "Start-Process -FilePath msiexec.exe -ArgumentList '/i https://s3.amazonaws.com/amazoncloudwatch-agent/windows/amd64/latest/AmazonCloudWatchAgent.msi /qn' -Wait",
+          "Start-Service AmazonCloudWatchAgent",
+          "& 'C:\\Program Files\\Amazon\\AmazonCloudWatchAgent\\amazon-cloudwatch-agent-ctl.ps1' -a fetch-config -m ec2 -c ssm:/AmazonCloudWatchAgent/config -s"
+        ]
+      }
+    }
+  ]
 }
+DOC
+}
+
 
 
 resource "aws_cloudwatch_metric_alarm" "disk_usage_alarm" {
